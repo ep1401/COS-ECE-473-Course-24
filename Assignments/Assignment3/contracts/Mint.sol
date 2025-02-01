@@ -60,9 +60,107 @@ contract Mint is Ownable, IMint{
     }
 
     /* TODO: implement your functions here */
-    
+    function openPosition(uint collateralAmount, address assetToken, uint collateralRatio) external override {
+        // Ensure the asset is registered
+        require(_assetMap[assetToken].token == assetToken, "Asset not registered");
+        
+        Asset storage asset = _assetMap[assetToken];
+        uint MCR = asset.minCollateralRatio;
 
-    
+        // Ensure the collateral ratio is greater than or equal to the asset's MCR
+        require(collateralRatio >= MCR, "Collateral ratio is too low");
+        
+        // Calculate the amount of sAssets to mint
+        uint mintAmount = getMintAmount(collateralAmount, assetToken, collateralRatio);
+        
+        // Transfer the collateral from the user to the contract
+        IERC20(collateralToken).transferFrom(msg.sender, address(this), collateralAmount);
+        
+        // Store the new position
+        _idxPositionMap[_currentPositionIndex] = Position({
+            idx: _currentPositionIndex,
+            owner: msg.sender,
+            collateralAmount: collateralAmount,
+            assetToken: assetToken,
+            assetAmount: mintAmount
+        });
+        
+        // Mint the sAssets and send them to the user
+        sAsset(assetToken).mint(msg.sender, mintAmount);
 
+        // Increment the position index
+        _currentPositionIndex++;
+    }
+
+    function closePosition(uint positionIndex) external override {
+        Position storage position = _idxPositionMap[positionIndex];
+        require(position.owner == msg.sender, "Only the owner can close the position");
+
+        // Burn all minted sAssets
+        sAsset(position.assetToken).burn(msg.sender, position.assetAmount);
+        
+        // Return collateral to the user
+        IERC20(collateralToken).transfer(msg.sender, position.collateralAmount);
+        
+        // Remove the position from the mapping
+        delete _idxPositionMap[positionIndex];
+    }
+
+    function deposit(uint positionIndex, uint collateralAmount) external override {
+        Position storage position = _idxPositionMap[positionIndex];
+        require(position.owner == msg.sender, "Only the owner can deposit");
+
+        // Add the new collateral to the existing collateral
+        position.collateralAmount += collateralAmount;
+
+        // Transfer collateral to the contract
+        IERC20(collateralToken).transferFrom(msg.sender, address(this), collateralAmount);
+    }
+
+    function withdraw(uint positionIndex, uint withdrawAmount) external override {
+        Position storage position = _idxPositionMap[positionIndex];
+        require(position.owner == msg.sender, "Only the owner can withdraw");
+
+        uint newCollateralAmount = position.collateralAmount - withdrawAmount;
+
+        // Calculate the new collateral ratio after withdrawal
+        uint newCollateralRatio = newCollateralAmount * (10 ** uint256(sAsset(position.assetToken).decimals())) / position.assetAmount;
+        require(newCollateralRatio >= _assetMap[position.assetToken].minCollateralRatio, "Collateral ratio would fall below MCR");
+
+        // Update the collateral amount
+        position.collateralAmount = newCollateralAmount;
+
+        // Transfer collateral to the user
+        IERC20(collateralToken).transfer(msg.sender, withdrawAmount);
+    }
+
+    function mint(uint positionIndex, uint mintAmount) external override {
+        Position storage position = _idxPositionMap[positionIndex];
+        require(position.owner == msg.sender, "Only the owner can mint");
+
+        // Calculate the total collateral value and check the collateral ratio
+        uint totalCollateralValue = position.collateralAmount * (10 ** uint256(sAsset(position.assetToken).decimals()));
+        uint newAssetAmount = position.assetAmount + mintAmount;
+        uint newCollateralRatio = totalCollateralValue / newAssetAmount;
+
+        // Ensure the collateral ratio is still above the MCR
+        require(newCollateralRatio >= _assetMap[position.assetToken].minCollateralRatio, "Collateral ratio would fall below MCR");
+
+        // Update the asset amount
+        position.assetAmount = newAssetAmount;
+
+        // Mint new sAssets and send to the user
+        sAsset(position.assetToken).mint(msg.sender, mintAmount);
+
+    }
+
+    function burn(uint positionIndex, uint burnAmount) external override {
+        Position storage position = _idxPositionMap[positionIndex];
+        require(position.owner == msg.sender, "Only the owner can burn");
+
+        position.assetAmount -= burnAmount;
+
+        sAsset(position.assetToken).burn(msg.sender, burnAmount);
+    }
 
 }
