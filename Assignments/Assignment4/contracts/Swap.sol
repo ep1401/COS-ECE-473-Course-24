@@ -57,7 +57,94 @@ contract Swap is Ownable, ISwap {
     }
 
     /* TODO: implement your functions here */
+    // Add liquidity to the pool
+    function addLiquidity(uint token0Amount) external override {
+        require(token0Amount > 0, "Amount must be greater than 0");
+        
+        // Calculate the required amount of token1 based on the current reserve ratio
+        uint token1Amount = reserve1 * token0Amount / reserve0;
+        
+        // Transfer tokens from the user to the contract
+        require(sAsset(token0).transferFrom(msg.sender, address(this), token0Amount), "Transfer of token0 failed");
+        require(sAsset(token1).transferFrom(msg.sender, address(this), token1Amount), "Transfer of token1 failed");
+        
+        // Calculate new shares for the liquidity provider
+        uint newShares = totalShares == 0 ? 
+            sqrt(token0Amount * token1Amount) : 
+            (token0Amount * totalShares) / reserve0;
+        
+        require(newShares > 0, "Insufficient liquidity minted");
+        
+        // Update reserves and shares
+        reserve0 += token0Amount;
+        reserve1 += token1Amount;
+        totalShares += newShares;
+        shares[msg.sender] += newShares;
+    }
 
+    // Remove liquidity from the pool
+    function removeLiquidity(uint withdrawShares) external override {
+        require(withdrawShares > 0 && withdrawShares <= shares[msg.sender], "Invalid shares amount");
+        
+        // Calculate the amounts of tokens to withdraw based on the shares
+        uint amount0 = (reserve0 * withdrawShares) / totalShares;
+        uint amount1 = (reserve1 * withdrawShares) / totalShares;
+        
+        require(amount0 > 0 && amount1 > 0, "Insufficient liquidity burned");
+        
+        // Update shares and reserves
+        shares[msg.sender] -= withdrawShares;
+        totalShares -= withdrawShares;
+        reserve0 -= amount0;
+        reserve1 -= amount1;
+        
+        // Transfer tokens to the user
+        require(sAsset(token0).transfer(msg.sender, amount0), "Transfer of token0 failed");
+        require(sAsset(token1).transfer(msg.sender, amount1), "Transfer of token1 failed");
+    }
 
-    
+    // Swap token0 for token1
+    function token0To1(uint token0Amount) external override {
+        require(token0Amount > 0, "Amount must be greater than 0");
+        
+        // Calculate fee and amount to exchange
+        uint fee = (token0Amount * 3) / 1000; // 0.3% fee
+        uint token0AmountAfterFee = token0Amount - fee;
+        
+        // Calculate the amount of token1 to return based on the constant product formula
+        uint token1Amount = (reserve1 * token0AmountAfterFee) / (reserve0 + token0AmountAfterFee);
+        
+        require(token1Amount > 0, "Insufficient output amount");
+        
+        // Transfer tokens
+        require(sAsset(token0).transferFrom(msg.sender, address(this), token0Amount), "Transfer of token0 failed");
+        require(sAsset(token1).transfer(msg.sender, token1Amount), "Transfer of token1 failed");
+        
+        // Update reserves
+        reserve0 += token0Amount;
+        reserve1 -= token1Amount;
+    }
+
+    // Swap token1 for token0
+    function token1To0(uint token1Amount) external override {
+        require(token1Amount > 0, "Amount must be greater than 0");
+        
+        // Calculate fee and amount to exchange
+        uint fee = (token1Amount * 3) / 1000; // 0.3% fee
+        uint token1AmountAfterFee = token1Amount - fee;
+        
+        // Calculate the amount of token0 to return based on the constant product formula
+        uint token0Amount = (reserve0 * token1AmountAfterFee) / (reserve1 + token1AmountAfterFee);
+        
+        require(token0Amount > 0, "Insufficient output amount");
+        
+        // Transfer tokens
+        require(sAsset(token1).transferFrom(msg.sender, address(this), token1Amount), "Transfer of token1 failed");
+        require(sAsset(token0).transfer(msg.sender, token0Amount), "Transfer of token0 failed");
+        
+        // Update reserves
+        reserve1 += token1Amount;
+        reserve0 -= token0Amount;
+    }
+
 }
