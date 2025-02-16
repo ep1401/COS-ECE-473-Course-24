@@ -187,4 +187,135 @@ contract("Mint test", async accounts => {
         const balance = await instances['sAsset'].balanceOf.call(accounts[0]);
         assert.equal(balance, 0);
     });
+    it("Test 7: test invalid ownership for deposit", async () => {
+        var instances = {}
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed()
+        }
+    
+        const collateralAmount = 3000 * 10 ** 8;
+        const collateralRatio = 2;
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, collateralAmount);
+        await instances['Mint'].openPosition(collateralAmount, instances['sAsset'].address, collateralRatio);
+    
+        // Try deposit from an unauthorized account (account[1])
+        try {
+            await instances['Mint'].deposit(0, collateralAmount, { from: accounts[1] });
+            assert.fail("Deposit should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can deposit"), `Expected 'Only the owner can deposit' but got ${err.message}`);
+        }
+    });
+    
+    it("Test 8: test invalid ownership for withdraw", async () => {
+        var instances = {}
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed()
+        }
+    
+        const collateralAmount = 3000 * 10 ** 8;
+        const collateralRatio = 2;
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, collateralAmount);
+        await instances['Mint'].openPosition(collateralAmount, instances['sAsset'].address, collateralRatio);
+    
+        // Try withdraw from an unauthorized account (account[1])
+        try {
+            await instances['Mint'].withdraw(0, collateralAmount, { from: accounts[1] });
+            assert.fail("Withdraw should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can withdraw"), `Expected 'Only the owner can withdraw' but got ${err.message}`);
+        }
+    });
+    
+    it("Test 9: test invalid ownership for mint", async () => {
+        var instances = {}
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed()
+        }
+    
+        const mintAmount = 150000000;
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, mintAmount);
+        await instances['Mint'].openPosition(mintAmount, instances['sAsset'].address, 2);
+    
+        // Try mint from an unauthorized account (account[1])
+        try {
+            await instances['Mint'].mint(0, mintAmount, { from: accounts[1] });
+            assert.fail("Mint should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can mint"), `Expected 'Only the owner can mint' but got ${err.message}`);
+        }
+    });
+    
+    it("Test 10: test invalid ownership for burn", async () => {
+        var instances = {}
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed()
+        }
+    
+        const burnAmount = 150000000;
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, burnAmount);
+        await instances['Mint'].openPosition(burnAmount, instances['sAsset'].address, 2);
+    
+        // Try burn from an unauthorized account (account[1])
+        try {
+            await instances['Mint'].burn(0, burnAmount, { from: accounts[1] });
+            assert.fail("Burn should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can burn"), `Expected 'Only the owner can burn' but got ${err.message}`);
+        }
+    });
+    it("Test 13: test under-collateralized CDP on withdraw", async () => {
+        var instances = {};
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed();
+        }
+    
+        const collateralAmount = 3000 * 10 ** 8;  // Amount of collateral (EUSD) to deposit
+        const collateralRatio = 2;  // The collateral ratio (MCR is set to 2 in the contract)
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, collateralAmount);
+        await instances['Mint'].openPosition(collateralAmount, instances['sAsset'].address, collateralRatio);
+    
+        // Try withdraw from an unauthorized account (account[1])
+        const excessiveWithdrawalAmount = collateralAmount * 2; // Attempt to withdraw more than the collateral amount
+        try {
+            await instances['Mint'].withdraw(0, excessiveWithdrawalAmount, { from: accounts[1] });
+            assert.fail("Withdraw should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can withdraw"), `Expected 'Only the owner can withdraw' but got ${err.message}`);
+        }
+    });
+    
+    it("Test 14: test under-collateralized CDP on mint", async () => {
+        var instances = {};
+        for (name of contracts_to_deploy) {
+            instances[name] = await contracts[name].deployed();
+        }
+    
+        const collateralAmount = 3000 * 10 ** 8;  // Amount of collateral (EUSD) to deposit
+        const collateralRatio = 2;  // The collateral ratio (MCR is set to 2 in the contract)
+    
+        // Open position from account[0]
+        await instances['EUSD'].approve(instances['Mint'].address, collateralAmount);
+        await instances['Mint'].openPosition(collateralAmount, instances['sAsset'].address, collateralRatio);
+    
+        // Try mint from an unauthorized account (account[1])
+        const excessiveMintAmount = 500000000;  // Trying to mint more than collateral supports
+        try {
+            await instances['Mint'].mint(0, excessiveMintAmount, { from: accounts[1] });
+            assert.fail("Mint should only be allowed by the owner");
+        } catch (err) {
+            assert(err.message.includes("Only the owner can mint"), `Expected 'Only the owner can mint' but got ${err.message}`);
+        }
+    });
+    
 });
